@@ -602,6 +602,25 @@ import DootLogo from "../components/DootLogo.astro";
         }
     });
 
+    // Track active tunnel tabs; when 0 tabs are open, disconnect WebRTC host
+    let activeTunnelTabsCount = 0;
+    if (tunnelChannel) {
+        tunnelChannel.onmessage = (e) => {
+            if (e.data?.roomId && e.data.roomId !== roomName) return;
+
+            if (e.data?.type === "TAB_OPENED") {
+                activeTunnelTabsCount++;
+            } else if (e.data?.type === "TAB_CLOSED") {
+                activeTunnelTabsCount = Math.max(0, activeTunnelTabsCount - 1);
+                if (activeTunnelTabsCount === 0) {
+                    console.log("[Hub] All tunnel tabs closed. Disconnecting WebRTC peer...");
+                    selectHost(null);
+                    renderHostsList();
+                }
+            }
+        };
+    }
+
     window.addEventListener("beforeunload", () => {
         if (tunnelChannel) {
             tunnelChannel.postMessage({ type: "HUB_CLOSED", roomId: roomName });

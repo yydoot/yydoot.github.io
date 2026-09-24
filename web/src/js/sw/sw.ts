@@ -34,13 +34,19 @@ sw.addEventListener("activate", (ev) => {
 //control message
 export const PROXY_REQUEST_START = "PROXY_REQUEST_START";
 
-async function getProxyClient(roomId: string): Promise<Client | null> {
+async function getProxyClient(roomId?: string | null): Promise<Client | null> {
   const clients = await sw.clients.matchAll({ type: "window", includeUncontrolled: true });
-  const client = clients.find((c) => {
-    const u = new URL(c.url);
-    return u.pathname.startsWith("/proxy") && u.searchParams.get("name") == roomId;
-  })
-  return client || null;
+  // 1. Try matching by roomId in name or room query param
+  if (roomId) {
+    const match = clients.find((c) => {
+      const u = new URL(c.url);
+      const name = u.searchParams.get("name") || u.searchParams.get("room");
+      return u.pathname.includes("/proxy") && (name === roomId || decodeURIComponent(u.search.slice(1)) === roomId);
+    });
+    if (match) return match;
+  }
+  // 2. Fallback: match any active proxy hub window
+  return clients.find((c) => new URL(c.url).pathname.includes("/proxy")) || null;
 }
 
 
@@ -66,8 +72,24 @@ async function handleFetch(ev: FetchEvent, url: URL): Promise<Response> {
     roomId = await getClientRoom(ev.clientId);
   }
 
+  // If this is a known static Doot page and NOT a tunnel request, let it pass through
+  const isDootPage =
+    (url.pathname === "/" && !tunnel) ||
+    url.pathname.startsWith("/room") ||
+    url.pathname.startsWith("/proxy");
+
   if (!roomId) {
-    return fetch(ev.request);
+    if (isDootPage) {
+      return fetch(ev.request);
+    }
+    // If not a Doot page, check if any proxy client exists
+    const fallbackClient = await getProxyClient(null);
+    if (!fallbackClient) {
+      return fetch(ev.request);
+    }
+    // Try to extract room from fallback client
+    const u = new URL(fallbackClient.url);
+    roomId = u.searchParams.get("name") || u.searchParams.get("room") || "proxy-room";
   }
 
   const targetClientId = ev.resultingClientId || ev.clientId;
