@@ -54,8 +54,8 @@ sw.addEventListener("fetch", (ev) => {
   const url = new URL(ev.request.url);
   if (url.origin != sw.location.origin) return;
 
-  // Not intercept the service worker script itself
-  if (url.pathname == "/sw.js") return;
+  // Do not intercept service worker script or injected client helper script
+  if (url.pathname === "/sw.js" || url.pathname === "/doot-client.js") return;
 
   ev.respondWith(handleFetch(ev, url));
 });
@@ -102,8 +102,8 @@ async function handleFetch(ev: FetchEvent, url: URL): Promise<Response> {
   return tunnelRequest(ev, proxyClient, targetPath);
 }
 
-const BRIDGE_TAG_BYTES = new TextEncoder().encode(
-  '<script src="/doot-bridge.js"></script>'
+const CLIENT_SCRIPT_TAG_BYTES = new TextEncoder().encode(
+  '<script src="/doot-client.js"></script>'
 );
 
 function createHtmlInjectTransform() {
@@ -126,7 +126,7 @@ function createHtmlInjectTransform() {
         const after = new TextEncoder().encode(text.slice(insertPos));
 
         controller.enqueue(before);
-        controller.enqueue(BRIDGE_TAG_BYTES);
+        controller.enqueue(CLIENT_SCRIPT_TAG_BYTES);
         controller.enqueue(after);
         injected = true;
       } else {
@@ -135,7 +135,7 @@ function createHtmlInjectTransform() {
     },
     flush(controller) {
       if (!injected) {
-        controller.enqueue(BRIDGE_TAG_BYTES);
+        controller.enqueue(CLIENT_SCRIPT_TAG_BYTES);
         injected = true;
       }
     },

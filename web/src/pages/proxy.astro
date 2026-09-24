@@ -713,7 +713,7 @@ import DootLogo from "../components/DootLogo.astro";
     }
 
     // Register Service Worker and listen for tunnel requests directly
-    async function initServiceWorkerBridge() {
+    async function initServiceWorkerListener() {
         if (!("serviceWorker" in navigator)) {
             console.warn("[Hub] ServiceWorker not supported in this browser");
             return;
@@ -733,13 +733,13 @@ import DootLogo from "../components/DootLogo.astro";
             );
         } catch (err) {
             console.error(
-                "[Hub] Failed to initialize Service Worker bridge:",
+                "[Hub] Failed to initialize Service Worker listener:",
                 err,
             );
         }
     }
 
-    initServiceWorkerBridge();
+    initServiceWorkerListener();
 
     // Fallback for cross-window messaging if needed
     window.addEventListener("message", (ev) => {

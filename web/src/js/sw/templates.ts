@@ -10,7 +10,7 @@ export function ProxyHubRequiredHtml(roomId: string, proxyUrl: string): string {
 </head>
 <body style="font-family:system-ui,-apple-system,sans-serif;padding:36px;background:#292d3e;color:#eef0f7;margin:0;line-height:1.4;">
   <h2 style="color:#89b4fa;margin:0 0 12px;font-size:20px;font-weight:600;">Proxy Hub Required</h2>
-  <p style="margin:0 0 4px;font-size:14px;color:#eef0f7;">No active WebRTC peer bridge was found in this browser.</p>
+  <p style="margin:0 0 4px;font-size:14px;color:#eef0f7;">No active WebRTC peer connection was found in this browser.</p>
   <p style="color:#a3a8c2;font-size:13px;margin:0 0 20px;">Open the client proxy hub in another tab to connect.</p>
   <p style="margin:0;">
     <a style="display:inline-block;padding:8px 16px;background:#89b4fa;color:#11111b;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;text-decoration:none;" href="${proxyUrl}" target="_blank" rel="noreferrer">Open Proxy Client Hub</a>
