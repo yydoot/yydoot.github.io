@@ -72,24 +72,10 @@ async function handleFetch(ev: FetchEvent, url: URL): Promise<Response> {
     roomId = await getClientRoom(ev.clientId);
   }
 
-  // If this is a known static Doot page and NOT a tunnel request, let it pass through
-  const isDootPage =
-    (url.pathname === "/" && !tunnel) ||
-    url.pathname.startsWith("/room") ||
-    url.pathname.startsWith("/proxy");
-
+  // If there is no __tunnel parameter and this tab wasn't spawned by a tunnel,
+  // this is a regular request. Pass straight to the network.
   if (!roomId) {
-    if (isDootPage) {
-      return fetch(ev.request);
-    }
-    // If not a Doot page, check if any proxy client exists
-    const fallbackClient = await getProxyClient(null);
-    if (!fallbackClient) {
-      return fetch(ev.request);
-    }
-    // Try to extract room from fallback client
-    const u = new URL(fallbackClient.url);
-    roomId = u.searchParams.get("name") || u.searchParams.get("room") || "proxy-room";
+    return fetch(ev.request);
   }
 
   const targetClientId = ev.resultingClientId || ev.clientId;
@@ -113,77 +99,15 @@ async function handleFetch(ev: FetchEvent, url: URL): Promise<Response> {
     });
   }
 
-  return tunnelRequest(ev, proxyClient, targetPath, roomId);
+  return tunnelRequest(ev, proxyClient, targetPath);
 }
 
-function getBridgeScript(roomId: string): string {
-  return `<script id="__doot_tunnel_bridge__">
-(() => {
-  const ROOM_ID = ${JSON.stringify(roomId)};
-  const TUNNEL_PARAM = "__tunnel";
+const BRIDGE_TAG_BYTES = new TextEncoder().encode(
+  '<script src="/doot-bridge.js"></script>'
+);
 
-  // 1. Hook history to preserve ?__tunnel on SPA client routing
-  const preserveTunnel = (urlStr) => {
-    try {
-      const u = new URL(urlStr, window.location.href);
-      if (!u.searchParams.has(TUNNEL_PARAM)) {
-        u.searchParams.set(TUNNEL_PARAM, ROOM_ID);
-        return u.pathname + u.search + u.hash;
-      }
-    } catch (_) {}
-    return urlStr;
-  };
-
-  const origPush = history.pushState;
-  history.pushState = function(state, title, url) {
-    return origPush.call(this, state, title, url ? preserveTunnel(url) : url);
-  };
-
-  const origReplace = history.replaceState;
-  history.replaceState = function(state, title, url) {
-    return origReplace.call(this, state, title, url ? preserveTunnel(url) : url);
-  };
-
-  if (!new URLSearchParams(window.location.search).has(TUNNEL_PARAM)) {
-    origReplace.call(history, history.state, document.title, preserveTunnel(window.location.href));
-  }
-
-  // 2. Hub <-> Tab lifecycle awareness via BroadcastChannel
-  const channel = new BroadcastChannel("doot_tunnel");
-  channel.postMessage({ type: "TAB_OPENED", roomId: ROOM_ID });
-
-  channel.onmessage = (e) => {
-    if (e.data?.roomId && e.data.roomId !== ROOM_ID) return;
-    if (e.data?.type === "HUB_CLOSED") {
-      showHubDisconnectedBanner();
-    } else if (e.data?.type === "ready" || e.data?.type === "HUB_READY") {
-      window.location.reload();
-    }
-  };
-
-  window.addEventListener("beforeunload", () => {
-    channel.postMessage({ type: "TAB_CLOSED", roomId: ROOM_ID });
-  });
-
-  function showHubDisconnectedBanner() {
-    if (document.getElementById("__doot_disconnected_banner__")) return;
-    const banner = document.createElement("div");
-    banner.id = "__doot_disconnected_banner__";
-    banner.innerHTML = \`
-      <div style="position:fixed;bottom:16px;right:16px;z-index:999999;background:#1e1e2e;color:#cdd6f4;padding:12px 18px;border-radius:8px;border:1px solid #f38ba8;box-shadow:0 8px 24px rgba(0,0,0,0.5);font-family:sans-serif;font-size:13px;display:flex;align-items:center;gap:12px;">
-        <span>⚠️ Proxy Hub disconnected</span>
-        <button onclick="window.open('/proxy?name=\${encodeURIComponent(ROOM_ID)}&mode=client','_blank')" style="background:#89b4fa;color:#11111b;border:none;border-radius:4px;padding:4px 10px;font-weight:600;cursor:pointer;">Reopen Hub</button>
-      </div>
-    \`;
-    document.body?.appendChild(banner);
-  }
-})();
-</script>`;
-}
-
-function createHtmlInjectTransform(roomId: string) {
+function createHtmlInjectTransform() {
   let injected = false;
-  const scriptBytes = new TextEncoder().encode(getBridgeScript(roomId));
   const headPattern = /<head[^>]*>/i;
 
   return new TransformStream<Uint8Array, Uint8Array>({
@@ -202,7 +126,7 @@ function createHtmlInjectTransform(roomId: string) {
         const after = new TextEncoder().encode(text.slice(insertPos));
 
         controller.enqueue(before);
-        controller.enqueue(scriptBytes);
+        controller.enqueue(BRIDGE_TAG_BYTES);
         controller.enqueue(after);
         injected = true;
       } else {
@@ -210,9 +134,8 @@ function createHtmlInjectTransform(roomId: string) {
       }
     },
     flush(controller) {
-      // Fallback: If no <head> tag was found, inject at the very start
       if (!injected) {
-        controller.enqueue(scriptBytes);
+        controller.enqueue(BRIDGE_TAG_BYTES);
         injected = true;
       }
     },
@@ -223,7 +146,6 @@ async function tunnelRequest(
   ev: FetchEvent,
   proxyClient: Client,
   targetPath: string,
-  roomId: string,
 ): Promise<Response> {
   const headBytes = serializeRequestHeader(ev.request, targetPath);
   const msgChannel = new MessageChannel();
@@ -244,7 +166,7 @@ async function tunnelRequest(
     readLoop(body.getReader(), localPort);
   }
 
-  return responsePromise(localPort, body, roomId);
+  return responsePromise(localPort, body);
 }
 
 async function readLoop(
@@ -271,7 +193,6 @@ async function readLoop(
 function responsePromise(
   port: MessagePort,
   body: ReadableStream<Uint8Array<ArrayBuffer>> | null,
-  roomId: string,
 ) {
   return new Promise<Response>((resolve, reject) => {
     let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
@@ -296,7 +217,7 @@ function responsePromise(
               // Delete content-length because injection changes payload length
               newHeaders.delete("content-length");
               finalStream = rawResponseStream.pipeThrough(
-                createHtmlInjectTransform(roomId),
+                createHtmlInjectTransform(),
               );
             }
 
