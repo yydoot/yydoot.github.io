@@ -80,19 +80,33 @@ async function executeHostFetch(
   try {
     const targetUrl = `${targetHost}${path}`;
 
-    // Set Host header and rewrite Referer to target server so Vite / Astro dev server can resolve module references
-    const fetchHeaders = new Headers(headers);
-    fetchHeaders.delete("x-doot-has-body");
-    try {
-      const parsedHost = new URL(targetHost).host;
-      fetchHeaders.set("Host", parsedHost);
-    } catch { }
+    // Sanitize headers: strip internal control headers, forbidden headers, and preflight triggers
+    const fetchHeaders = new Headers();
+    const FORBIDDEN_OR_PREFLIGHT_HEADERS = new Set([
+      "host",
+      "origin",
+      "connection",
+      "x-doot-has-body",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "sec-fetch-dest",
+      "sec-fetch-mode",
+      "sec-fetch-site",
+      "sec-fetch-user",
+    ]);
 
-    const referer = fetchHeaders.get("referer");
+    headers.forEach((v, k) => {
+      const lower = k.toLowerCase();
+      if (!FORBIDDEN_OR_PREFLIGHT_HEADERS.has(lower)) {
+        fetchHeaders.set(k, v);
+      }
+    });
+
+    const referer = headers.get("referer");
     if (referer) {
       try {
         const refUrl = new URL(referer);
-        // If referer contains /tunnel/:roomId/(.*), rewrite path to /$1
         const tunnelMatch = refUrl.pathname.match(/^\/tunnel\/[^\/]+(.*)$/);
         const refPath = tunnelMatch ? (tunnelMatch[1] || "/") : refUrl.pathname;
         fetchHeaders.set("Referer", `${targetHost}${refPath}${refUrl.search}`);
@@ -100,7 +114,6 @@ async function executeHostFetch(
         fetchHeaders.set("Referer", `${targetHost}/`);
       }
     } else {
-      // Provide targetHost as referer so Astro/Vite virtual modules have compile context
       fetchHeaders.set("Referer", `${targetHost}/`);
     }
 
