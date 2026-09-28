@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import DootLogo from "../components/DootLogo.astro";
+import SignalingToast from "../components/SignalingToast.astro";
 import SendPanel from "../components/SendPanel.astro";
 import ReceivePanel from "../components/ReceivePanel.astro";
 import DebugChat from "../components/DebugChat.astro";
@@ -19,6 +20,8 @@ import DebugChat from "../components/DebugChat.astro";
                 >
             </div>
         </header>
+
+        <SignalingToast />
 
         <div class="mobile-peer">
             <p id="mobile-peer-label" class="mobile-peer-label">
@@ -63,7 +66,9 @@ import DebugChat from "../components/DebugChat.astro";
         initWebRTC,
         type FileMetadata,
         type TransferProgress,
-    } from "../transfer";
+    } from "../js/file_transfer";
+    import { getStoredUsername } from "../js/username";
+    import { SS } from "../js/signaling";
 
     // Room info
     const search = window.location.search;
@@ -75,6 +80,8 @@ import DebugChat from "../components/DebugChat.astro";
     const roomName = roomParam || fallbackParam || "unknown-room";
     const roomNameEl = document.getElementById("room-name");
     if (roomNameEl) roomNameEl.textContent = roomName;
+
+    let currentUsername = getStoredUsername();
 
     // Peer info
     const peerName = document.getElementById("peer-name");
@@ -98,64 +105,85 @@ import DebugChat from "../components/DebugChat.astro";
     tabBtnSend?.addEventListener("click", () => setActiveTab("send"));
     tabBtnReceive?.addEventListener("click", () => setActiveTab("receive"));
 
-    function updatePeerUI(peerId: string | null) {
+    let activePeerMetadata: any = null;
+
+    function updatePeerUI(peerId: string | null, metadata?: any) {
+        if (metadata !== undefined) {
+            activePeerMetadata = metadata;
+        }
+
         if (!peerId) {
+            activePeerMetadata = null;
             if (peerName) peerName.textContent = "Waiting for someone...";
             if (mobilePeerLabel)
                 mobilePeerLabel.innerHTML = `Waiting for someone...`;
             return;
         }
 
-        const formattedDesktop = `${peerId.slice(0, 8)}`;
-        if (peerName) peerName.textContent = formattedDesktop;
+        const displayName =
+            activePeerMetadata?.username || `Peer-${peerId.slice(0, 6)}`;
+        const shortId = peerId.slice(0, 8);
+
+        if (peerName) {
+            peerName.innerHTML = `<span>${displayName}</span> <span class="mono-font" style="opacity: 0.6; font-size: 11px;">(${shortId})</span>`;
+        }
 
         if (mobilePeerLabel) {
-            mobilePeerLabel.innerHTML = `<span style="color: var(--text-primary); margin-right: 5px;">Peer</span> <span class="peer-id-val">${peerId.slice(0, 8)}</span>`;
+            mobilePeerLabel.innerHTML = `<span style="color: var(--text-primary); margin-right: 5px;">Peer</span> <span class="peer-id-val">${displayName}</span>`;
         }
     }
 
     let activePeerId: string | null = null;
-    initWebRTC(roomName, {
-        onPeerJoined: (peerId) => {
-            activePeerId = peerId;
-            updatePeerUI(peerId);
-            (window as any).__dootDebug?.appendLog(
-                "system",
-                `Peer joined: ${peerId.slice(0, 8)}...`,
-            );
-        },
-        onPeerLeft: (peerId) => {
-            if (activePeerId === peerId) {
-                activePeerId = null;
-                updatePeerUI(null);
+    initWebRTC(
+        roomName,
+        {
+            onPeerJoined: (peerId, meta) => {
+                activePeerId = peerId;
+                updatePeerUI(peerId, meta);
                 (window as any).__dootDebug?.appendLog(
                     "system",
-                    `Peer left: ${peerId.slice(0, 8)}...`,
+                    `Peer joined: ${peerId.slice(0, 8)}...`,
                 );
-            }
+            },
+            onPeerMetadataUpdated: (peerId, meta) => {
+                if (activePeerId === peerId) {
+                    updatePeerUI(peerId, meta);
+                }
+            },
+            onPeerLeft: (peerId) => {
+                if (activePeerId === peerId) {
+                    activePeerId = null;
+                    updatePeerUI(null);
+                    (window as any).__dootDebug?.appendLog(
+                        "system",
+                        `Peer left: ${peerId.slice(0, 8)}...`,
+                    );
+                }
+            },
+            onChannelState: (isOpen) => {
+                (window as any).__dootDebug?.setChannelState(isOpen);
+                if (activePeerId) updatePeerUI(activePeerId);
+                (window as any).__dootDebug?.appendLog(
+                    "system",
+                    `DataChannel is now ${isOpen ? "OPEN" : "CLOSED"}`,
+                );
+            },
+            onMessage: (msg) => {
+                (window as any).__dootDebug?.appendLog("peer", msg);
+            },
+            onRemoteManifest: (remoteFiles: FileMetadata[]) => {
+                (window as any).__dootReceive?.renderRemoteFiles(remoteFiles);
+            },
+            onTransferProgress: (progress: TransferProgress) => {
+                if (progress.direction === "receiving") {
+                    (window as any).__dootReceive?.updateTransferProgressBar(progress);
+                } else {
+                    (window as any).__dootSend?.updateSenderProgressBar(progress);
+                }
+            },
         },
-        onChannelState: (isOpen) => {
-            (window as any).__dootDebug?.setChannelState(isOpen);
-            if (activePeerId) updatePeerUI(activePeerId);
-            (window as any).__dootDebug?.appendLog(
-                "system",
-                `DataChannel is now ${isOpen ? "OPEN" : "CLOSED"}`,
-            );
-        },
-        onMessage: (msg) => {
-            (window as any).__dootDebug?.appendLog("peer", msg);
-        },
-        onRemoteManifest: (remoteFiles: FileMetadata[]) => {
-            (window as any).__dootReceive?.renderRemoteFiles(remoteFiles);
-        },
-        onTransferProgress: (progress: TransferProgress) => {
-            if (progress.direction === "receiving") {
-                (window as any).__dootReceive?.updateTransferProgressBar(progress);
-            } else {
-                (window as any).__dootSend?.updateSenderProgressBar(progress);
-            }
-        },
-    });
+        { role: "file", username: currentUsername },
+    );
 </script>
 
 <style>

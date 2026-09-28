@@ -24,10 +24,11 @@ import FileCard from "./FileCard.astro";
         requestRemoteFile,
         saveReceivedFile,
         cancelTransfer,
+        iconForFile,
+        formatSize,
         type FileMetadata,
         type TransferProgress,
-    } from "../transfer";
-    import { iconForFile, formatSize } from "../transfer/fileUtils";
+    } from "../js/file_transfer";
 
     const remoteTemplate = document.getElementById(
         "remote-file-card-template",

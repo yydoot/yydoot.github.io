@@ -32,8 +32,7 @@ import FileCard from "./FileCard.astro";
 <FileCard mode="send" />
 
 <script>
-    import { offerLocalFiles, cancelTransfer } from "../transfer";
-    import { iconForFile, formatSize } from "../transfer/fileUtils";
+    import { offerLocalFiles, cancelTransfer, iconForFile, formatSize } from "../js/file_transfer";
 
     const template = document.getElementById(
         "file-card-template",

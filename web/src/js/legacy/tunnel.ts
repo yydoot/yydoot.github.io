@@ -6,7 +6,8 @@ import {
   PROXY_RESPONSE_PLACEHOLDER,
 } from "../proxy/http";
 import { PEER_ID } from "../peerId";
-import { STUN_SERVERS, type Signal } from "../../transfer/protocol";
+import { STUN_SERVERS } from "../file_transfer/protocol";
+import { type Signal } from "../signaling";
 import { SIGNAL_SERVER_URL } from "../signaling";
 
 export type PeerRole = "proxy" | "client";
