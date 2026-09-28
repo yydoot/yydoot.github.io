@@ -30,7 +30,7 @@ export function ParseMessage(message: any): Result<ClientMessage> {
       }
       return Result({
         type: "join",
-        room_id: message.room_id.trim(),
+        room_id: message.room_id.trim().toLowerCase(),
         metadata: message.metadata,
       });
     }
@@ -42,7 +42,7 @@ export function ParseMessage(message: any): Result<ClientMessage> {
       ) {
         return ErrorResult("invalid room_id");
       }
-      return Result({ type: message.type, room_id: message.room_id.trim() });
+      return Result({ type: message.type, room_id: message.room_id.trim().toLowerCase() });
     }
     case "update_metadata": {
       if (
@@ -57,7 +57,7 @@ export function ParseMessage(message: any): Result<ClientMessage> {
       }
       return Result({
         type: "update_metadata",
-        room_id: message.room_id.trim(),
+        room_id: message.room_id.trim().toLowerCase(),
         metadata: message.metadata,
       });
     }

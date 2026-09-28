@@ -70,14 +70,15 @@ import DebugChat from "../components/DebugChat.astro";
     import { getStoredUsername } from "../js/username";
     import { SS } from "../js/signaling";
 
-    // Room info
-    const search = window.location.search;
-    const params = new URLSearchParams(search);
-    const roomParam = params.get("name") || params.get("room");
-    // Fallback: if user navigated with ?roomName (no key) or anything raw
-    const rawParam = search.startsWith("?") ? search.slice(1).trim() : "";
-    const fallbackParam = rawParam && !rawParam.includes("=") ? decodeURIComponent(rawParam) : "";
-    const roomName = roomParam || fallbackParam || "unknown-room";
+    const params = new URLSearchParams(window.location.search);
+    const roomName = (params.get("name") || "").trim().toLowerCase();
+
+    if (params.get("name") !== roomName) {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.set("name", roomName);
+        window.history.replaceState(null, "", cleanUrl.toString());
+    }
+
     const roomNameEl = document.getElementById("room-name");
     if (roomNameEl) roomNameEl.textContent = roomName;
 
@@ -176,9 +177,13 @@ import DebugChat from "../components/DebugChat.astro";
             },
             onTransferProgress: (progress: TransferProgress) => {
                 if (progress.direction === "receiving") {
-                    (window as any).__dootReceive?.updateTransferProgressBar(progress);
+                    (window as any).__dootReceive?.updateTransferProgressBar(
+                        progress,
+                    );
                 } else {
-                    (window as any).__dootSend?.updateSenderProgressBar(progress);
+                    (window as any).__dootSend?.updateSenderProgressBar(
+                        progress,
+                    );
                 }
             },
         },

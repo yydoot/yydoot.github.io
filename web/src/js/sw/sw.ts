@@ -36,16 +36,13 @@ export const PROXY_REQUEST_START = "PROXY_REQUEST_START";
 
 async function getProxyClient(roomId?: string | null): Promise<Client | null> {
   const clients = await sw.clients.matchAll({ type: "window", includeUncontrolled: true });
-  // 1. Try matching by roomId in name or room query param
   if (roomId) {
     const match = clients.find((c) => {
       const u = new URL(c.url);
-      const name = u.searchParams.get("name") || u.searchParams.get("room");
-      return u.pathname.includes("/proxy") && (name === roomId || decodeURIComponent(u.search.slice(1)) === roomId);
+      return u.pathname.includes("/proxy") && u.searchParams.get("name") === roomId;
     });
     if (match) return match;
   }
-  // 2. Fallback: match any active proxy hub window
   return clients.find((c) => new URL(c.url).pathname.includes("/proxy")) || null;
 }
 

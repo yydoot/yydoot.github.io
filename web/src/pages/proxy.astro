@@ -77,7 +77,8 @@ import DootLogo from "../components/DootLogo.astro";
                                             class="btn-retry-health"
                                             title="Recheck local server connection"
                                         >
-                                            <iconify-icon icon="mdi:refresh"></iconify-icon>
+                                            <iconify-icon icon="mdi:refresh"
+                                            ></iconify-icon>
                                             <span>Retry</span>
                                         </button>
                                     </div>
@@ -209,13 +210,16 @@ import DootLogo from "../components/DootLogo.astro";
     import { setTargetHost, RequestLogs } from "../js/proxy/host";
     import { getStoredUsername } from "../js/username";
 
+    // Room info: strictly defined as ?name=<roomId>
     const search = window.location.search;
     const params = new URLSearchParams(search);
-    const roomParam = params.get("name") || params.get("room");
-    const rawParam = search.startsWith("?") ? search.slice(1).trim() : "";
-    const fallbackParam =
-        rawParam && !rawParam.includes("=") ? decodeURIComponent(rawParam) : "";
-    const roomName = roomParam || fallbackParam || "proxy-room";
+    const roomName = (params.get("name") || "proxy-room").trim().toLowerCase();
+
+    if (params.get("name") !== roomName) {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.set("name", roomName);
+        window.history.replaceState(null, "", cleanUrl.toString());
+    }
 
     const roomIdEl = document.getElementById("room-id");
     if (roomIdEl) roomIdEl.textContent = roomName;
@@ -545,24 +549,27 @@ import DootLogo from "../components/DootLogo.astro";
                 hostsContainer.innerHTML = newHtml;
 
                 // When user clicks the host card, select the host and open the tunnel tab
-                hostsContainer.querySelectorAll(".host-card").forEach((card) => {
-                    const clickHandler = () => {
-                        const targetId = (card as HTMLElement).dataset.peerId;
-                        if (targetId) {
-                            selectHost(targetId);
-                            window.open(tunnelUrl, "_blank");
-                            renderHostsList();
-                        }
-                    };
+                hostsContainer
+                    .querySelectorAll(".host-card")
+                    .forEach((card) => {
+                        const clickHandler = () => {
+                            const targetId = (card as HTMLElement).dataset
+                                .peerId;
+                            if (targetId) {
+                                selectHost(targetId);
+                                window.open(tunnelUrl, "_blank");
+                                renderHostsList();
+                            }
+                        };
 
-                    card.addEventListener("click", clickHandler);
-                    card.addEventListener("keydown", (e: any) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            clickHandler();
-                        }
+                        card.addEventListener("click", clickHandler);
+                        card.addEventListener("keydown", (e: any) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                clickHandler();
+                            }
+                        });
                     });
-                });
             }
         }
     }
@@ -613,7 +620,9 @@ import DootLogo from "../components/DootLogo.astro";
             } else if (e.data?.type === "TAB_CLOSED") {
                 activeTunnelTabsCount = Math.max(0, activeTunnelTabsCount - 1);
                 if (activeTunnelTabsCount === 0) {
-                    console.log("[Hub] All tunnel tabs closed. Disconnecting WebRTC peer...");
+                    console.log(
+                        "[Hub] All tunnel tabs closed. Disconnecting WebRTC peer...",
+                    );
                     selectHost(null);
                     renderHostsList();
                 }

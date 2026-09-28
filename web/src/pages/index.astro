@@ -76,8 +76,28 @@ import UserBadge from "../components/UserBadge.astro";
 	const joinForm = document.getElementById(
 		"join-form",
 	) as HTMLFormElement | null;
+	const roomInput = document.getElementById(
+		"room-input",
+	) as HTMLInputElement | null;
 	const tabBtnFile = document.getElementById("tab-btn-file");
 	const tabBtnProxy = document.getElementById("tab-btn-proxy");
+
+	roomInput?.addEventListener("input", () => {
+		if (roomInput.value) {
+			const start = roomInput.selectionStart;
+			const end = roomInput.selectionEnd;
+			roomInput.value = roomInput.value.toLowerCase();
+			if (start !== null && end !== null) {
+				roomInput.setSelectionRange(start, end);
+			}
+		}
+	});
+
+	joinForm?.addEventListener("submit", () => {
+		if (roomInput) {
+			roomInput.value = roomInput.value.trim().toLowerCase();
+		}
+	});
 
 	tabBtnFile?.addEventListener("click", () => {
 		if (joinForm) joinForm.action = "/room";
