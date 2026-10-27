@@ -47,13 +47,36 @@ export class FileDestinationWriter {
     return true;
   }
 
+  private isClosing = false;
+
   public async writeChunk(chunk: ArrayBuffer): Promise<void> {
+    if (this.isClosing) {
+      // Stream is already closing or finished; ignore or store in memory if finishing hasn't returned
+      return;
+    }
+
     if (this.writable) {
-      this.writeQueue = this.writeQueue.then(async () => {
-        if (this.writable) {
-          await this.writable.write(chunk);
-        }
-      });
+      this.writeQueue = this.writeQueue
+        .then(async () => {
+          if (this.writable && !this.isClosing) {
+            try {
+              await this.writable.write(chunk);
+            } catch (err: any) {
+              // Ignore writes attempted while stream is closing or aborting
+              if (
+                err?.name === "TypeError" &&
+                err?.message?.includes("closing writable stream")
+              ) {
+                return;
+              }
+              throw err;
+            }
+          }
+        })
+        .catch((err) => {
+          console.warn("[Storage] writeChunk error:", err);
+        });
+
       await this.writeQueue;
     } else {
       this.memoryChunks.push(chunk);
@@ -61,6 +84,7 @@ export class FileDestinationWriter {
   }
 
   public async pause(): Promise<void> {
+    this.isClosing = true;
     await this.writeQueue;
     if (this.writable) {
       try {
@@ -71,10 +95,13 @@ export class FileDestinationWriter {
   }
 
   public async finish(): Promise<File | null> {
+    this.isClosing = true;
     await this.writeQueue;
     // 🍏 OPFS Complete -> Get completed File object
     if (this.tier === "opfs" && this.writable && this.opfsFileHandle) {
-      await this.writable.close();
+      try {
+        await this.writable.close();
+      } catch { }
       this.writable = null;
 
       const opfsFile = await this.opfsFileHandle.getFile();
@@ -96,6 +123,7 @@ export class FileDestinationWriter {
   }
 
   public async cleanup(): Promise<void> {
+    this.isClosing = true;
     this.memoryChunks = [];
     if (this.writable) {
       try {
