@@ -241,7 +241,7 @@ export class FileConnectionManager {
   private setupTransferChannel(channel: RTCDataChannel): void {
     this.transferChannel = channel;
     this.transferChannel.binaryType = "arraybuffer";
-    this.transferChannel.bufferedAmountLowThreshold = 512 * 1024;
+    this.transferChannel.bufferedAmountLowThreshold = 64 * 1024;
 
     channel.onopen = () => this.checkReadiness();
     channel.onclose = () => this.checkReadiness();
